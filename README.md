@@ -23,11 +23,13 @@ This project has the goal to develop and robustly evaluate various machine learn
     |   ├── _init_.py                       # Initiate src as a Python package
     │   ├── custom_hyperparameters.py       # Setting a custom hyperparameter space
     │   ├── eda.py                          # Functions used for the exploratory data analysis (EDA)
+    │   ├── ml_viz.py                       # Functions used for vizualization of the model results comparison
     │   ├── nested_cv.py    # Repeated Nested Cross Validation class
-    │   └── predict.py      # Script for final model prediction
-    ├── environment.yml     # Micromamba/Conda environment definition file
-    ├── README.md           # Project README file
-    └── setup.py            # Package setup file for editable installation
+    │   └── predict.py      # Script for final winner model prediction
+    ├── .gitignore          # Ignore files not related to the project
+    ├── ex_2.yml            # Micromamba environment definition file
+    ├── README.md           # Project README
+    └── setup.py            # Package setup script for the editable installation
 
 ## Installation
 
@@ -51,7 +53,7 @@ cd Assignment-2
 
 Create environment and activate the micromamba environment by:
 
-micromamba env create -f environment.yml
+micromamba env create -f ex_2.yml
 
 micromamba activate ex_2
 

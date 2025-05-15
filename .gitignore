@@ -1,0 +1,7 @@
+# Ignore Python virtual environment directory
+new/
+
+# Byte-code files
+*.pyc
+__pycache__/
+/src/your_project_name.egg-info

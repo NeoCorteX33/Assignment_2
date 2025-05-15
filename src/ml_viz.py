@@ -38,27 +38,21 @@ def plot_algorithm_performance_summary(summary_df, primary_metric, figsize=(12, 
         return
 
     # Data for plotting (summary_df is already sorted by compare_algorithms)
-    estimators = summary_df.index
+    estimators: list[str] = summary_df.index.to_list()
     median_values = summary_df[primary_metric]
     ci_low = summary_df[ci_low_col]
     ci_high = summary_df[ci_high_col]
 
     # Calculate error bar lengths (asymmetric)
-    # Error below median: median - ci_low
-    # Error above median: ci_high - median
     error_below = median_values - ci_low
     error_above = ci_high - median_values
     asymmetric_error = [error_below.values, error_above.values]
 
     # Create the plot
     plt.figure(figsize=figsize)
-    bars = sns.barplot(x=estimators, y=median_values, palette=palette, capsize=0.1) # capsize for error bar caps
+    bars = sns.barplot(x=estimators, y=median_values, palette=palette, capsize=0.1)
 
     # Add error bars
-    # bars.patches gives access to the bars created by seaborn
-    # We need to iterate through them to add custom error bars if sns.barplot doesn't handle asymmetric well directly
-    # For simplicity, let's use plt.errorbar directly on top or ensure sns.barplot's yerr is used correctly.
-    # A more direct way with matplotlib:
     x_coords = np.arange(len(estimators))
     plt.bar(x_coords, median_values, yerr=asymmetric_error, capsize=5, color=sns.color_palette(palette, len(estimators)), alpha=0.8)
 
@@ -67,7 +61,7 @@ def plot_algorithm_performance_summary(summary_df, primary_metric, figsize=(12, 
     for i, val in enumerate(median_values):
         if pd.notna(val):
             plt.text(x_coords[i], val + 0.01 * plt.ylim()[1], f'{val:.3f}', ha='center', va='bottom', fontsize=9, color='black')
-        else: # Handle NaN median values if any
+        else:
             plt.text(x_coords[i], 0, 'N/A', ha='center', va='bottom', fontsize=9, color='black')
 
 
@@ -94,10 +88,10 @@ def plot_algorithm_performance_summary(summary_df, primary_metric, figsize=(12, 
 def plot_single_model_metrics_summary(
     summary_df,
     estimator_name,
-    metric_names, # Pass the list of base metric names, e.g., from runner.metric_names
+    metric_names,
     figsize=(10, 7),
     title=None,
-    palette='coolwarm_r' # Using a diverging palette can be nice here
+    palette='coolwarm_r'
 ):
     """
     Plots a bar chart of all specified metrics for a single estimator,

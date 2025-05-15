@@ -4,8 +4,8 @@ from setuptools import setup, find_packages
 setup(
     name='assignment_2',
     version='0.1.0',
-    packages=find_packages(where='src'), # Setuptools to find packages in the 'src' directory
-    package_dir={'': 'src'}, # Map the root package to the 'src' directory
+    packages=find_packages(where='src'), # Find packages in the 'src' directory
+    package_dir={'': 'src'},
     install_requires=[
     'setuptools~=80.1.0',
     'ipykernel~=6.29',
@@ -18,5 +18,5 @@ setup(
     'lightgbm>=4.0',
     'atom-ml>=5.2.0'
     ],
-    python_requires='>=3.11', # Minimum Python version
+    python_requires='>=3.11',
 )
