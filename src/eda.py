@@ -1,3 +1,5 @@
+# eda.py
+
 from pathlib import Path
 from scipy import stats
 import math
@@ -57,7 +59,7 @@ def data_basics(data_path:Path) -> tuple[pd.DataFrame, pd.DataFrame]:
         class_dist = raw_data['diagnosis'].value_counts(normalize=True).mul(100).round(2)
         class_counts = raw_data['diagnosis'].value_counts()
         for cls, pct in class_dist.items():
-            print(f"  - {cls}: {class_counts[cls]} samples ({pct}%)")
+            print(f"  - {cls}: {class_counts[cls]} samples ({pct}%)") # type: ignore
     
     # Check for missing values
     print("\n❓ MISSING VALUES:")
@@ -129,6 +131,7 @@ def group_features(df:pd.DataFrame, base_features:list, target_column:str ='diag
         target_column (str): The name of the target column (e.g., 'diagnosis').
         base_features (list): A list of the base feature names (e.g., ['radius', 'texture', ...]).
     """
+    i = 0
     n_features = len(base_features)
     n_cols = 2
     n_rows = math.ceil(n_features / n_cols)

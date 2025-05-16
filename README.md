@@ -16,20 +16,18 @@ This project has the goal to develop and robustly evaluate various machine learn
     .
     ├── data/
     │   └── breast_cancer.csv
-    ├── models/                             # Directory with the final trained models in (.pkl) format
+    ├── models/
     │   ├── winner_model.pkl                # The best performing model
-    ├── notebooks/                          # Jupyter notebooks for analysis
+    ├── notebooks/
     ├── src/                                # Source code for reusable functions and classes
     |   ├── _init_.py                       # Initiate src as a Python package
-    │   ├── custom_hyperparameters.py       # Setting a custom hyperparameter space
     │   ├── eda.py                          # Functions used for the exploratory data analysis (EDA)
     │   ├── ml_viz.py                       # Functions used for vizualization of the model results comparison
-    │   ├── nested_cv.py    # Repeated Nested Cross Validation class
-    │   └── predict.py      # Script for final winner model prediction
-    ├── .gitignore          # Ignore files not related to the project
-    ├── ex_2.yml            # Micromamba environment definition file
-    ├── README.md           # Project README
-    └── setup.py            # Package setup script for the editable installation
+    │   ├── nested_cv.py                    # rnCV class with all relevant methods for training and testing
+    ├── .gitignore
+    ├── ex_2.yml            # Micromamba environment dependences to ensure reproducibility
+    ├── README.md
+    └── setup.py            # Package setup python script used for editable pip installation
 
 ## Installation
 

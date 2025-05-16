@@ -1,3 +1,6 @@
+# nested_cv.py
+
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,7 +15,7 @@ from scipy.stats import bootstrap
 from numpy import median as np_median
 
 class rnCV:
-    def __init__(self, dataset:pd.DataFrame, estimators:list, target_column:str='diagnosis', positive_class_label:str='M', feature_selection_method:str=None, R=10, N=5, K=3,  random_seed=33):
+    def __init__(self, dataset:pd.DataFrame, estimators:list, target_column:str='diagnosis', positive_class_label:str='M', R=10, N=5, K=3,  random_seed=33):
         """Performs Repeated Nested Cross-Validation (rnCV) using ATOM for the inner loop and scikit-learn for the outer loop.
 
         Attributes:
@@ -34,8 +37,6 @@ class rnCV:
             raise ValueError(f"Target column '{target_column}' not found in dataset.")
         if positive_class_label not in dataset[target_column].unique():
             raise ValueError(f"Positive class label '{positive_class_label}' not found in target column.")
-        if feature_selection_method not in ['LASSO', 'Ridge', 'RandomForest', None]:
-            raise ValueError("Feature selection method must be 'LASSO', 'Ridge', 'RandomForest', or None.")
         if not isinstance(estimators, list) or len(estimators) == 0:
             raise ValueError("Estimators must be a non-empty list.")
         
@@ -44,7 +45,6 @@ class rnCV:
         self.target_column = target_column
         self.positive_class_label = positive_class_label
         self.estimators = estimators
-        self.feature_selection_method = feature_selection_method
         self.R = R
         self.N = N
         self.K = K
@@ -73,8 +73,11 @@ class rnCV:
             
         Returns:
             dict: Dictionary containing the calculated metrics, or None for not calculated metrics.
+            np.array: Confusion matrix values.
         """
         metrics = {}
+        conf_matrix = None
+
         try:
             # Get confusion matrix values
             conf_matrix = confusion_matrix(y_true, y_pred, labels=[1, 0])
@@ -229,7 +232,6 @@ class rnCV:
                     if y_pred_outer is not None and y_prob_outer is not None:
                         fold_metrics, conf_matrix = self._calculate_metrics(y_test_outer, y_pred_outer, y_prob_outer)
                         # Store the confusion matrix with a unique key
-                        #matrix_key = f"{current_repeat}_{current_fold}_{atom.models[model_name]}"
                         matrix_key = f"{current_repeat}_{current_fold}_{model_name}"
                         self.confusion_matrices[matrix_key] = conf_matrix
                     else:
@@ -277,11 +279,89 @@ class rnCV:
             data_array = np.array(data_points)
             median_val = np_median(data_array)
             try:
-                res = bootstrap((data_array,), np_median, confidence_level=confidence_level,
-                                random_state=self.random_seed, method='percentile')
+                res = bootstrap((data_array,), np_median, confidence_level=confidence_level, method='percentile')
                 return median_val, (res.confidence_interval.low, res.confidence_interval.high)
             except Exception:
                 return median_val, (np.nan, np.nan)
+
+
+    def plot_confusion_matrices(self, normalize=True, figsize=(16, 12), cmap='Blues'):
+        """
+        Plots the saved confusion matrices for all estimators.
+        
+        Args:
+            normalize (bool): Whether to normalize the confusion matrices. Defaults to True.
+            figsize (tuple): Figure size for the plot. Defaults to (16, 12).
+            cmap (str): Colormap for the heatmap. Defaults to 'Blues'.
+        """
+        if not self.confusion_matrices:
+            print("No confusion matrices found. Run run_nested_cv first.")
+            return
+        
+        # Group confusion matrices by estimator
+        estimator_matrices = {}
+        for key, matrix in self.confusion_matrices.items():
+            if matrix is None:
+                continue
+            
+            # Extract estimator name from the key
+            _, _, estimator = key.split('_', 2)
+            
+            if estimator not in estimator_matrices:
+                estimator_matrices[estimator] = []
+            estimator_matrices[estimator].append(matrix)
+        
+        # Calculate average confusion matrix for each estimator
+        avg_matrices = {}
+        for estimator, matrices in estimator_matrices.items():
+            if matrices:
+                avg_matrices[estimator] = np.mean(matrices, axis=0)
+        
+        # Plot the average confusion matrices
+        n_estimators = len(avg_matrices)
+        if n_estimators == 0:
+            print("No valid confusion matrices to plot.")
+            return
+        
+        # Calculate grid layout
+        n_cols = min(3, n_estimators)
+        n_rows = (n_estimators + n_cols - 1) // n_cols
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
+        axes = axes.flatten()
+        
+        for i, (estimator, matrix) in enumerate(avg_matrices.items()):
+            if i >= len(axes):
+                break
+            
+            ax = axes[i]
+            
+            # Normalize if requested
+            if normalize:
+                matrix = matrix.astype('float') / matrix.sum(axis=1)[:, np.newaxis]
+                fmt = '.2f'
+            else:
+                fmt = 'd'
+            
+            # Plot the confusion matrix
+            sns.heatmap(matrix, annot=True, fmt=fmt, cmap=cmap, 
+                        xticklabels=['Negative (0)', 'Positive (1)'],
+                        yticklabels=['Positive (1)', 'Negative (0)'], ax=ax)
+            
+            ax.set_ylabel('True Label')
+            ax.set_xlabel('Predicted Label')
+            ax.set_title(f'Confusion Matrix - {estimator}')
+        
+        i = len(avg_matrices)
+        # Hide unused subplots
+        for j in range(i+1, len(axes)):
+            axes[j].axis('off')
+        
+        plt.tight_layout()
+        plt.suptitle("Average Confusion Matrices Across All Folds", y=1.02, fontsize=16)
+        plt.show()
+        
+        return avg_matrices
 
 
     def compare_algorithms(self, primary_metric='AUC', sort_ascending=False):
@@ -375,79 +455,155 @@ class rnCV:
         return summary_df
     
 
-    def plot_confusion_matrices(self, normalize=True, figsize=(16, 12), cmap='Blues'):
-        """
-        Plots the saved confusion matrices for all estimators.
-        
+    def train_final_model(self, winner_model_name:str, inner_metric:str="roc_auc", n_trials:int=50, custom_hp_params= None, save_dir:str='../models', save_name:str='winner.pkl'):
+        """Trains the final model using the entire dataset with the optimal hyperparameters found.
         Args:
-            normalize (bool): Whether to normalize the confusion matrices. Defaults to True.
-            figsize (tuple): Figure size for the plot. Defaults to (16, 12).
-            cmap (str): Colormap for the heatmap. Defaults to 'Blues'.
+            winner_model_name (str): The name of the single winning algorithm (e.g., "RF", "LGB").
+            n_trials (int): Number of trials for Optuna hyperparameter search.
+            custom_hyperparameters (dict): Custom hyperparameters for the winning model.
+            save_dir (str): Directory to save the final model.
+            save_name (str): Name of the saved model file.
         """
-        if not self.confusion_matrices:
-            print("No confusion matrices found. Run run_nested_cv first.")
-            return
-        
-        # Group confusion matrices by estimator
-        estimator_matrices = {}
-        for key, matrix in self.confusion_matrices.items():
-            if matrix is None:
-                continue
+
+        # Check if only one model is selected
+        if len(self.estimators) > 1:
+            raise ValueError("Multiple models were selected. Please select only one model for final training.")
+        if not isinstance(winner_model_name, str):
+            raise ValueError("Model name must be a string.")
+
+        X = self.dataset.drop(columns=[self.target_column])
+        y = self.dataset[self.target_column]
+        print(f"Training final model '{winner_model_name}' on the entire dataset...")
+
+        # Initialize the ATOMClassifier with the entire dataset
+        print(f"Initializing ATOMClassifier for final model training ...")
+
+        try:
+            atom = ATOMClassifier(
+                X, y,
+                device= 'cpu',
+                engine= 'sklearn',
+                verbose= 0,
+                random_state= self.random_seed
+            )
+
+            # ATOM handles hyperparameter tuning
+            print(f"Running ATOM for model {winner_model_name} ...")
+            print(f"Running inner loop with {self.K} folds for hyperparameter tuning ...")
             
-            # Extract estimator name from the key
-            _, _, estimator = key.split('_', 2)
+            # Feature selection can be done here if needed
+            atom.impute(strat_num='mean', verbose=1)
+            atom.scale(strategy='robust', verbose=1)
+
+            # Run the inner loop with the specified number of trials
+            atom.run(
+                models=[winner_model_name],
+                metric=inner_metric,
+                n_trials=n_trials,
+                ht_params={'cv': self.K},
+                est_params= custom_hp_params
+            )
+
+            # # Get the best model
+            # best_model = atom._get_models()[0]
+
+            # Save the trained model
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+                
+            save_path = os.path.join(save_dir, save_name)
+            atom.save(save_path, save_data=False)
+
+        except Exception as e:
+            print(f"[Error] An exception occurred during final model training: {e}")
+            return None, None
+        
+        print(f"Final model saved to: {save_path}")
+    
+
+    def predict_unseen(self, independent_test_set:pd.DataFrame, winner_model_path:str):
+        """Makes predictions on an unseen dataset using the best trained model and asseses the performance.
+        Args:
+            independent_test_set (pd.DataFrame): The unseen dataset for predictions.
+            winner_model_path (str): Path to the saved model file.
+        
+        Returns:
+            pd.DataFrame: DataFrame containing the predictions and performance metrics.
+        """
+
+        # Check if the independent test set has a correct format
+        try:
+            train_columns = self.dataset.drop(columns=[self.target_column]).columns
+
+            # Verify that the independent test set has the same columns as the training set
+            missing_columns = set(train_columns) - set(independent_test_set.columns)
+            if missing_columns:
+                raise ValueError(f"Independent test set is missing columns: {missing_columns}")
             
-            if estimator not in estimator_matrices:
-                estimator_matrices[estimator] = []
-            estimator_matrices[estimator].append(matrix)
-        
-        # Calculate average confusion matrix for each estimator
-        avg_matrices = {}
-        for estimator, matrices in estimator_matrices.items():
-            if matrices:
-                avg_matrices[estimator] = np.mean(matrices, axis=0)
-        
-        # Plot the average confusion matrices
-        n_estimators = len(avg_matrices)
-        if n_estimators == 0:
-            print("No valid confusion matrices to plot.")
-            return
-        
-        # Calculate grid layout
-        n_cols = min(3, n_estimators)
-        n_rows = (n_estimators + n_cols - 1) // n_cols
-        
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, squeeze=False)
-        axes = axes.flatten()
-        
-        for i, (estimator, matrix) in enumerate(avg_matrices.items()):
-            if i >= len(axes):
-                break
+            # Check the target column
+            if self.target_column not in independent_test_set.columns:
+                raise ValueError(f"Target column '{self.target_column}' not found in independent test")
             
-            ax = axes[i]
+            # Make a copy so the original set is not altered
+            X_test = independent_test_set[train_columns].copy()
+
+            # Encoding the target variable in the same way with training
+            y_test = independent_test_set[self.target_column].apply(
+                lambda x: 1 if x == self.positive_class_label else 0
+            )
             
-            # Normalize if requested
-            if normalize:
-                matrix = matrix.astype('float') / matrix.sum(axis=1)[:, np.newaxis]
-                fmt = '.2f'
+            print("Loading winner model")
+            atom = ATOMClassifier.load(winner_model_path, data=(X_test, y_test))
+
+            print("Making predictions on the independent test set")
+            # Get the model and make the predictions
+            final_model = atom._get_models()[0]
+            model_name = atom.models
+
+            # Get predictions
+            y_pred = final_model.predict(X_test)
+
+            # Get probabilities and handle different return types
+            y_prob = final_model.predict_proba(X_test)
+
+            # Convert to numpy array if it's a DataFrame
+            if hasattr(y_pred, 'values'):
+                print(f"Converting predictions DataFrame to numpy array, shape: {y_pred.shape}")
+                y_pred = y_pred.values
+            
+            # Convert to numpy array if it's a DataFrame
+            if hasattr(y_prob, 'values'):
+                print(f"Converting DataFrame to numpy array, shape: {y_prob.shape}")
+                y_prob = y_prob.values
+                    
+            # Extract positive class probabilities (typically column 1)
+            if len(y_prob.shape) > 1 and y_prob.shape[1] > 1:
+                # Multi-column case - get positive class probability (column 1)
+                y_prob = y_prob[:, 1]
             else:
-                fmt = 'd'
-            
-            # Plot the confusion matrix
-            sns.heatmap(matrix, annot=True, fmt=fmt, cmap=cmap, 
-                        xticklabels=['Negative (0)', 'Positive (1)'],
-                        yticklabels=['Positive (1)', 'Negative (0)'], ax=ax)
-            
-            ax.set_ylabel('True Label')
-            ax.set_xlabel('Predicted Label')
-            ax.set_title(f'Confusion Matrix - {estimator}')
-        
-        # Hide unused subplots
-        for j in range(i+1, len(axes)):
-            axes[j].axis('off')
-        
-        plt.tight_layout()
-        plt.suptitle("Average Confusion Matrices Across All Folds", y=1.02, fontsize=16)
-        plt.show()
-        
-        return avg_matrices
+                # Single column case - flatten
+                y_prob = y_prob.flatten()
+
+            # Calculate metrics if predictions succeeded
+            metrics = {}
+            if y_pred is not None and y_prob is not None:
+                metrics, conf_matrix = self._calculate_metrics(y_test, y_pred, y_prob)
+                matrix_key = f"WINNER model: {model_name}"
+                self.confusion_matrices[matrix_key] = conf_matrix
+                
+            # Store metrics with proper format
+            result_record = {
+                'Repeat': 'Test',
+                'Outer_Fold': 'Final',
+                'Estimator': model_name,
+                **metrics  # Unpack all metrics
+            }
+            self.results = [result_record]  # Reset and store only test set results
+
+            # Print metrics
+            print("\nTest Set Performance:")
+            for metric_name, value in metrics.items():
+                print(f"{metric_name}: {value:.3f}")
+
+        except Exception as e:
+            print(f"Error in predicting unseen data: {e}")
